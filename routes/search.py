@@ -10,11 +10,11 @@ def search(keyword):
 
     # Search afternic_domains
     cursor.execute("""
-    SELECT domain, price, category, is_fast_transfer
-    FROM afternic_domains
-    WHERE LOWER(domain) LIKE %s
-    LIMIT 50
-""", (f'%{keyword.lower()}%',))
+        SELECT domain, price, category, is_fast_transfer
+        FROM afternic_domains
+        WHERE LOWER(domain) LIKE %s
+        LIMIT 50
+    """, (f'%{keyword.lower()}%',))
 
     results = cursor.fetchall()
 
@@ -56,7 +56,6 @@ def search(keyword):
     for row in results:
         domain_full = row[0]
         price = row[1]
-        category = row[2]
         is_fast_transfer = row[3]
 
         parts = domain_full.rsplit('.', 1)
@@ -74,8 +73,7 @@ def search(keyword):
             "domain_name": domain_name,
             "domain_extension": domain_extension,
             "price": price,
-            "category": category,
-            "is_fast_transfer": is_fast_transfer,
+            "fast_transfer": is_fast_transfer,
             "domain_details": {
                 "name_length": name_length,
                 "has_hyphen": has_hyphen,
