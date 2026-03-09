@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from database import get_connection
 
 search_bp = Blueprint('search', __name__)
@@ -8,13 +8,26 @@ def search(keyword):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Search afternic_domains
+    # Pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 100, type=int)
+    offset = (page - 1) * per_page
+
+    # Get total count first
+    cursor.execute("""
+        SELECT COUNT(*) FROM afternic_domains
+        WHERE LOWER(domain) LIKE %s
+    """, (f'%{keyword.lower()}%',))
+    
+    total_count = cursor.fetchone()[0]
+
+    # Search afternic_domains with pagination
     cursor.execute("""
         SELECT domain, price, category, is_fast_transfer
         FROM afternic_domains
         WHERE LOWER(domain) LIKE %s
-        LIMIT 50
-    """, (f'%{keyword.lower()}%',))
+        LIMIT %s OFFSET %s
+    """, (f'%{keyword.lower()}%', per_page, offset))
 
     results = cursor.fetchall()
 
@@ -30,7 +43,7 @@ def search(keyword):
         domain_name = parts[0] if len(parts) == 2 else row[0]
         domain_names.append(domain_name.lower())
 
-    # ONE single ICANN query - just count per domain
+    # ONE single ICANN query
     cursor.execute("""
         SELECT 
             LOWER(SPLIT_PART(domain, '.', 1)) as name,
@@ -52,7 +65,7 @@ def search(keyword):
         }
 
     # Build response
-    response = []
+    results_list = []
     for row in results:
         domain_full = row[0]
         price = row[1]
@@ -68,7 +81,7 @@ def search(keyword):
 
         icann_data = icann_map.get(domain_name.lower(), {"tlds": "", "count": 0})
 
-        response.append({
+        results_list.append({
             "root_domain": domain_full,
             "domain_name": domain_name,
             "domain_extension": domain_extension,
@@ -85,7 +98,17 @@ def search(keyword):
             }
         })
 
+    # Calculate pagination
+    last_page = (total_count + per_page - 1) // per_page
+
     cursor.close()
     conn.close()
 
-    return jsonify(response)
+    return jsonify({
+        "total_count": total_count,
+        "current_page_count": len(results_list),
+        "current_page": page,
+        "last_page": last_page,
+        "per_page": per_page,
+        "results": results_list
+    })
