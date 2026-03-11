@@ -8,33 +8,60 @@ def search(keyword):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Pagination parameters
+    # Minimum keyword length check
+    if len(keyword) < 3:
+        cursor.close()
+        conn.close()
+        return jsonify({
+            "status": "error",
+            "message": "Keyword must be at least 3 characters long"
+        }), 400
+
+    # Parameters
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 100, type=int)
-    offset = (page - 1) * per_page
+    limit = request.args.get('limit', 100, type=int)
+    is_prefix = request.args.get('is_prefix', 0, type=int)
+    is_suffix = request.args.get('is_suffix', 0, type=int)
+    offset = (page - 1) * limit
 
-    # Get total count first
-    cursor.execute("""
-        SELECT COUNT(*) FROM afternic_domains
-        WHERE LOWER(domain) LIKE %s
-    """, (f'%{keyword.lower()}%',))
-    
-    total_count = cursor.fetchone()[0]
+    # Build search pattern based on parameters
+    if is_prefix == 1:
+        pattern = f'{keyword.lower()}%'
+    elif is_suffix == 1:
+        pattern = f'%{keyword.lower()}.%'
+    else:
+        pattern = f'%{keyword.lower()}%'
 
-    # Search afternic_domains with pagination
+        
+
+    # Get results AND total count in ONE query!
     cursor.execute("""
-        SELECT domain, price, category, is_fast_transfer
+        SELECT domain, price, category, is_fast_transfer,
+               COUNT(*) OVER() as total_count
         FROM afternic_domains
         WHERE LOWER(domain) LIKE %s
         LIMIT %s OFFSET %s
-    """, (f'%{keyword.lower()}%', per_page, offset))
+    """, (pattern, limit, offset))
 
     results = cursor.fetchall()
 
     if not results:
         cursor.close()
         conn.close()
-        return jsonify({"message": "No results found", "keyword": keyword}), 404
+        return jsonify({
+            "status": "ok",
+            "total_count": 0,
+            "current_page_count": 0,
+            "current_page": page,
+            "last_page": 0,
+            "per_page": limit,
+            "domains": []
+        })
+    
+    
+
+    # Get total count from first row
+    total_count = results[0][4]
 
     # Get all domain names first
     domain_names = []
@@ -47,8 +74,8 @@ def search(keyword):
     cursor.execute("""
         SELECT 
             LOWER(SPLIT_PART(domain, '.', 1)) as name,
-            STRING_AGG(tld, ', ') as tlds,
-            COUNT(*) as tld_count
+            STRING_AGG(DISTINCT tld, ', ') as tlds,
+            COUNT(DISTINCT tld) as tld_count
         FROM icann_domains
         WHERE LOWER(SPLIT_PART(domain, '.', 1)) = ANY(%s)
         GROUP BY LOWER(SPLIT_PART(domain, '.', 1))
@@ -59,13 +86,16 @@ def search(keyword):
     # Group ICANN results
     icann_map = {}
     for icann_row in icann_rows:
-        icann_map[icann_row[0]] = {
-            "tlds": icann_row[1],
-            "count": icann_row[2]
+        name = icann_row[0]
+        tlds = list(set(icann_row[1].split(', ')))
+        count = len(tlds)
+        icann_map[name] = {
+            "tlds": ", ".join(sorted(tlds)),
+            "count": count
         }
 
     # Build response
-    results_list = []
+    domains_list = []
     for row in results:
         domain_full = row[0]
         price = row[1]
@@ -81,7 +111,7 @@ def search(keyword):
 
         icann_data = icann_map.get(domain_name.lower(), {"tlds": "", "count": 0})
 
-        results_list.append({
+        domains_list.append({
             "root_domain": domain_full,
             "domain_name": domain_name,
             "domain_extension": domain_extension,
@@ -98,17 +128,25 @@ def search(keyword):
             }
         })
 
+        
+
     # Calculate pagination
-    last_page = (total_count + per_page - 1) // per_page
+    last_page = (total_count + limit - 1) // limit
 
     cursor.close()
     conn.close()
 
     return jsonify({
+        "status": "ok",
         "total_count": total_count,
-        "current_page_count": len(results_list),
+        "current_page_count": len(domains_list),
         "current_page": page,
         "last_page": last_page,
-        "per_page": per_page,
-        "results": results_list
+        "per_page": limit,
+        "domains": domains_list
     })
+
+
+
+
+    
