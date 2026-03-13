@@ -9,13 +9,7 @@ def search(keyword):
     cursor = conn.cursor()
 
     # Minimum keyword length check
-    if len(keyword) < 3:
-        cursor.close()
-        conn.close()
-        return jsonify({
-            "status": "error",
-            "message": "Keyword must be at least 3 characters long"
-        }), 400
+   
 
     # Parameters
     page = request.args.get('page', 1, type=int)
