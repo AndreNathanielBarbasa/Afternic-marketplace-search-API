@@ -1,12 +1,15 @@
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 def get_connection():
     conn = psycopg2.connect(
-        host="localhost",
-        port="5432",
-        database="afternic_db",
-        user="postgres",
-        password="postgres123"
+        host=os.getenv('DB_HOST'),
+        port=os.getenv('DB_PORT'),
+        database=os.getenv('DB_NAME'),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD')
     )
     return conn
