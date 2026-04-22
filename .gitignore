@@ -1,4 +1,7 @@
-data/
+.env
 venv/
 __pycache__/
-.env
+*.pyc
+data/afternic_dataset.csv
+data/domains_02-18-2026.zst
+data/icann_sample.csv
